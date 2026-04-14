@@ -73,6 +73,14 @@ def create_mcp_server(config: Config, call_manager: CallManager) -> Server:
                                 "context that supplements the instructions."
                             ),
                         },
+                        "transfer_number": {
+                            "type": "string",
+                            "description": (
+                                "Phone number (E.164) to transfer the call to if the voice agent "
+                                "gets stuck or the caller requests a human. Overrides the default "
+                                "transfer_number in config. Example: +15551234567"
+                            ),
+                        },
                     },
                     "required": ["to_number", "instructions"],
                 },
@@ -161,6 +169,7 @@ async def handle_make_call(
     instructions = arguments["instructions"]
     context = arguments.get("context")
     call_mcp_servers = arguments.get("mcp_servers", [])
+    transfer_number = arguments.get("transfer_number", "")
 
     # Validate E.164 format
     if not to_number.startswith("+") or not to_number[1:].isdigit():
@@ -185,6 +194,7 @@ async def handle_make_call(
         call_manager=call_manager,
         context=context,
         extra_mcp_urls=call_mcp_servers,
+        transfer_number=transfer_number,
     ))
 
     return [TextContent(
@@ -221,6 +231,8 @@ async def handle_get_call_result(
             "duration_seconds": call.duration_seconds,
             "transcript": call.transcript,
             "summary": call.summary,
+            "transferred": call.transferred,
+            "voicemail": call.voicemail,
             "proposed_actions": [
                 {"tool": a.tool, "description": a.description, "params": a.params}
                 for a in call.proposed_actions

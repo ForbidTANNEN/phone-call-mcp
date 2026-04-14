@@ -31,6 +31,8 @@ class CallRecord:
     summary: str = ""
     proposed_actions: list[ProposedAction] = field(default_factory=list)
     duration_seconds: int = 0
+    transferred: bool = False
+    voicemail: bool = False
     error: str | None = None
 
 
@@ -65,11 +67,15 @@ class CallManager:
         summary: str,
         proposed_actions: list[dict | ProposedAction],
         duration_seconds: int,
+        transferred: bool = False,
+        voicemail: bool = False,
     ) -> None:
         call = self._calls[call_id]
         call.status = CallStatus.COMPLETED
         call.transcript = transcript
         call.summary = summary
+        call.transferred = transferred
+        call.voicemail = voicemail
         call.proposed_actions = [
             a if isinstance(a, ProposedAction) else ProposedAction(**a)
             for a in proposed_actions

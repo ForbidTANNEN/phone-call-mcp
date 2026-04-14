@@ -10,7 +10,7 @@ from datetime import datetime
 
 import aiohttp
 from livekit import api, rtc
-from livekit.agents import Agent, AgentSession, JobContext
+from livekit.agents import Agent, AgentSession, JobContext, function_tool
 from livekit.agents.llm.mcp import MCPServerHTTP, MCPServerStdio
 from livekit.agents.utils import http_context
 from livekit.plugins.anthropic import LLM as AnthropicLLM
@@ -45,6 +45,12 @@ RULES:
 - If you can't hear: "Sorry, I didn't catch that."
 - If they say "hold on": wait silently.
 - Be warm and helpful. Acknowledge what they say. Vary your phrasing.
+
+VOICEMAIL DETECTION — CRITICAL:
+- If the FIRST thing you hear is a long uninterrupted message (not a greeting directed at you), it is voicemail.
+- Voicemail cues: "please leave a message", "after the tone", "beep", "not available", "press 1 to leave a callback", "mailbox is full", "recording", "at the tone", "office hours are", automated menu system reciting options.
+- If you detect voicemail or an automated system: immediately call the hang_up_voicemail tool. Say NOTHING. Do not leave a message. Do not speak. Just call the tool.
+- A real person will greet you briefly and pause for your response. Voicemail talks AT you without stopping.
 """
 
 
@@ -154,6 +160,72 @@ class PhoneCallAgent(Agent):
             self.session.generate_reply()
 
 
+# ─── Voicemail detection tool ────────────────────────────────────────
+
+def _build_voicemail_tool(voicemail_detected: asyncio.Event) -> list:
+    """Build a tool the agent calls when it detects voicemail/automated system."""
+
+    @function_tool(name="hang_up_voicemail")
+    async def hang_up_voicemail(reason: str) -> str:
+        """Hang up immediately because voicemail or an automated system was detected.
+        Call this the instant you detect voicemail — do NOT leave a message.
+
+        Args:
+            reason: What you heard (e.g. "voicemail greeting", "automated menu", "press 1 to leave a callback")
+        """
+        logger.info(f"Voicemail detected, hanging up: {reason}")
+        voicemail_detected.set()
+        return "Hanging up now."
+
+    return [hang_up_voicemail]
+
+
+# ─── Transfer tool ───────────────────────────────────────────────────
+
+def _build_transfer_tool(
+    config: Config,
+    room_name: str,
+    transfer_number: str,
+    transferred: asyncio.Event,
+) -> list:
+    """Build a LiveKit function_tool that dials the owner into the room."""
+
+    @function_tool(name="transfer_to_human")
+    async def transfer_to_human(reason: str) -> str:
+        """Transfer the caller to a real person. Use when you cannot resolve the
+        caller's issue, they ask for a human, or the conversation is stuck.
+
+        Args:
+            reason: Brief reason for the transfer (e.g. "caller wants to speak to a manager")
+        """
+        try:
+            async with api.LiveKitAPI(
+                url=config.livekit.url,
+                api_key=config.livekit.api_key,
+                api_secret=config.livekit.api_secret,
+            ) as lk:
+                await lk.sip.create_sip_participant(
+                    api.CreateSIPParticipantRequest(
+                        sip_trunk_id=config.twilio.sip_trunk_id,
+                        sip_call_to=transfer_number,
+                        room_name=room_name,
+                        participant_identity="transfer-user",
+                        participant_name="Human Agent",
+                        play_dialtone=True,
+                        wait_until_answered=True,
+                    ),
+                    timeout=30,
+                )
+            logger.info(f"Transfer connected: {transfer_number} joined {room_name} (reason: {reason})")
+            transferred.set()
+            return "Transfer connected. The human is now on the line. Say goodbye and stop talking."
+        except Exception as e:
+            logger.error(f"Transfer failed: {e}")
+            return "I wasn't able to connect you right now. Let me try to help you myself."
+
+    return [transfer_to_human]
+
+
 # ─── Call runner ─────────────────────────────────────────────────────
 
 async def run_call(
@@ -165,6 +237,7 @@ async def run_call(
     context: dict | None = None,
     vad: SileroVAD | None = None,
     extra_mcp_urls: list[str] | None = None,
+    transfer_number: str = "",
 ) -> None:
     """Create a LiveKit room, dial out, and run the voice agent."""
     _http_session = aiohttp.ClientSession()
@@ -205,6 +278,34 @@ YOUR TASK FOR THIS CALL:
                 "Use check_calendar or check_availability when you need to verify dates or times. "
                 "Do not announce that you are checking — just do it silently and speak the result."
             )
+
+        # Build transfer tool if a transfer number is configured
+        transfer_tools = []
+        transferred = asyncio.Event()
+        if transfer_number:
+            transfer_tools = _build_transfer_tool(
+                config=config,
+                room_name=f"phone-call-{call_id}",
+                transfer_number=transfer_number,
+                transferred=transferred,
+            )
+            agent_instructions += (
+                "\n\nTRANSFER RULES:"
+                "\nYou can transfer the caller to a real person using transfer_to_human."
+                "\nDo this if:"
+                "\n- The caller asks to speak to a person or manager"
+                "\n- You cannot answer their question after trying"
+                "\n- The conversation is going in circles"
+                "\n- There is a complex issue you cannot resolve"
+                "\nBefore transferring, say something like: \"Let me connect you with someone who can help.\""
+                "\nAfter calling transfer_to_human, say: \"I'm connecting you now, one moment please.\" Then stop talking."
+            )
+
+        # Voicemail detection tool — always available
+        voicemail_detected = asyncio.Event()
+        voicemail_tools = _build_voicemail_tool(voicemail_detected)
+
+        all_tools = calendar_tools + transfer_tools + voicemail_tools
 
         agent = PhoneCallAgent(instructions=agent_instructions)
 
@@ -247,7 +348,7 @@ YOUR TASK FOR THIS CALL:
                 },
             },
             tts_text_transforms=["filter_markdown", "filter_emoji"],
-            **({"tools": calendar_tools} if calendar_tools else {}),
+            **({"tools": all_tools} if all_tools else {}),
             mcp_servers=mcp_servers,
             max_tool_steps=5,
             preemptive_generation=True,
@@ -305,7 +406,7 @@ YOUR TASK FOR THIS CALL:
             await asyncio.sleep(0.5)
             agent.send_greeting()
 
-            # Wait for hangup
+            # Wait for hangup or transfer completion
             disconnected = False
 
             @room.on("participant_disconnected")
@@ -314,8 +415,25 @@ YOUR TASK FOR THIS CALL:
                 if participant.identity == "phone-user":
                     disconnected = True
 
-            while not disconnected:
+            while not disconnected and not transferred.is_set() and not voicemail_detected.is_set():
                 await asyncio.sleep(1)
+
+            if voicemail_detected.is_set():
+                logger.info(f"Call {call_id}: voicemail detected, disconnecting")
+                await room.disconnect()
+                call_manager.complete_call(
+                    call_id=call_id,
+                    transcript=transcript,
+                    summary="Voicemail or automated system detected — hung up without leaving a message.",
+                    proposed_actions=[],
+                    duration_seconds=int(time.time() - call_start),
+                    voicemail=True,
+                )
+                return
+
+            if transferred.is_set():
+                # Give the agent a moment to say its goodbye, then leave
+                await asyncio.sleep(3)
 
             duration = int(time.time() - call_start)
 
@@ -343,6 +461,7 @@ YOUR TASK FOR THIS CALL:
                 summary=summary,
                 proposed_actions=proposed_actions,
                 duration_seconds=duration,
+                transferred=transferred.is_set(),
             )
 
             await room.disconnect()
