@@ -35,6 +35,9 @@ dependencies = [
     "anthropic>=0.40.0",
     "starlette>=0.40.0",
     "uvicorn>=0.30.0",
+    "google-api-python-client>=2.100.0",
+    "google-auth>=2.20.0",
+    "google-auth-oauthlib>=1.0.0",
 ]
 
 [project.optional-dependencies]
