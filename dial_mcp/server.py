@@ -27,14 +27,16 @@ def create_mcp_server(config: Config, call_manager: CallManager) -> Server:
                 description=(
                     "Make an outbound phone call with an AI voice agent. Returns a call_id "
                     "immediately — use get_call_result to check status and transcript.\n\n"
-                    "The voice agent ALREADY has Google Calendar access built in — it can "
-                    "check events, availability, and schedules in real-time during the call. "
-                    "You do NOT need to pass calendar URLs or pre-fetch calendar data. Just "
-                    "describe what the call should accomplish in the instructions and the "
-                    "voice agent handles the rest.\n\n"
-                    "IMPORTANT — instructions: Be specific about who the caller is and what "
-                    "the voice agent should do. Include names, relevant details, and the "
-                    "goal of the call. The voice agent follows these as its system prompt."
+                    "CALENDAR: Use list_integrations to check if Google Calendar is linked. "
+                    "If linked, the voice agent has LIVE tool-call access to the calendar "
+                    "DURING the call — it can look up events, check availability, and find "
+                    "free slots in real-time mid-conversation. Do NOT pre-fetch calendar "
+                    "data or pass calendar URLs. The voice agent calls the calendar itself "
+                    "when it needs to. Just describe the goal in the instructions.\n\n"
+                    "If calendar is not linked, call link_calendar first.\n\n"
+                    "INSTRUCTIONS: Be specific about who the caller is and what the voice "
+                    "agent should do. Include names, relevant details, and the goal. "
+                    "The voice agent follows these as its system prompt."
                 ),
                 inputSchema={
                     "type": "object",
