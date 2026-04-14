@@ -25,23 +25,16 @@ def create_mcp_server(config: Config, call_manager: CallManager) -> Server:
             Tool(
                 name="make_call",
                 description=(
-                    "Make an outbound phone call with an AI voice agent. The voice agent can "
-                    "read from MCP tools (calendars, CRM, etc.) in real-time DURING the call. "
-                    "Returns a call_id immediately — use get_call_result to check status and "
-                    "get the transcript when complete.\n\n"
-                    "Before calling, check list_integrations to see if calendar is connected. "
-                    "If the call involves scheduling or appointments, the voice agent will "
-                    "automatically use Google Calendar in real-time during the call. No need to "
-                    "pass mcp_servers for calendar — it's built in when linked.\n\n"
-                    "IMPORTANT — mcp_servers: For non-calendar MCP servers (CRM, email, etc.), "
-                    "pass their HTTP URLs in the mcp_servers array so the voice agent can access "
-                    "them during the call. The voice agent has READ-ONLY access — it cannot "
-                    "create, update, or delete anything. After the call, proposed write actions "
-                    "are returned for you to execute.\n\n"
-                    "IMPORTANT — instructions: Be specific about who the caller is and what the "
-                    "voice agent should do. Include the caller's name, relevant account details, "
-                    "and the goal of the call. The voice agent will follow these instructions "
-                    "as its system prompt."
+                    "Make an outbound phone call with an AI voice agent. Returns a call_id "
+                    "immediately — use get_call_result to check status and transcript.\n\n"
+                    "The voice agent ALREADY has Google Calendar access built in — it can "
+                    "check events, availability, and schedules in real-time during the call. "
+                    "You do NOT need to pass calendar URLs or pre-fetch calendar data. Just "
+                    "describe what the call should accomplish in the instructions and the "
+                    "voice agent handles the rest.\n\n"
+                    "IMPORTANT — instructions: Be specific about who the caller is and what "
+                    "the voice agent should do. Include names, relevant details, and the "
+                    "goal of the call. The voice agent follows these as its system prompt."
                 ),
                 inputSchema={
                     "type": "object",
