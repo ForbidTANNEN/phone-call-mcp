@@ -15,8 +15,16 @@ def build_calendar_tools(creds: GoogleCredentials) -> list:
     """Build LiveKit function_tools using the given credentials.
 
     Returns list of decorated functions for AgentSession(tools=[...]).
+    The CalendarClient is lazy-initialized on first tool call to avoid
+    blocking the event loop with googleapiclient.discovery.build() at startup.
     """
-    client = CalendarClient(creds)
+    _client = None
+
+    def _get_client() -> CalendarClient:
+        nonlocal _client
+        if _client is None:
+            _client = CalendarClient(creds)
+        return _client
 
     @function_tool(name="check_calendar")
     async def check_calendar(date: str) -> str:
@@ -26,7 +34,11 @@ def build_calendar_tools(creds: GoogleCredentials) -> list:
             date: The date to check in YYYY-MM-DD format (e.g. 2026-04-14)
         """
         try:
-            return client.list_events_voice(date, date)
+            import asyncio
+            client = await asyncio.get_event_loop().run_in_executor(None, _get_client)
+            return await asyncio.get_event_loop().run_in_executor(
+                None, client.list_events_voice, date, date
+            )
         except Exception as e:
             logger.error(f"Calendar lookup failed: {e}")
             return "I wasn't able to check the calendar right now."
@@ -39,7 +51,11 @@ def build_calendar_tools(creds: GoogleCredentials) -> list:
             date: The date to check in YYYY-MM-DD format (e.g. 2026-04-14)
         """
         try:
-            return client.availability_voice(date)
+            import asyncio
+            client = await asyncio.get_event_loop().run_in_executor(None, _get_client)
+            return await asyncio.get_event_loop().run_in_executor(
+                None, client.availability_voice, date
+            )
         except Exception as e:
             logger.error(f"Availability check failed: {e}")
             return "I wasn't able to check availability right now."
@@ -49,7 +65,11 @@ def build_calendar_tools(creds: GoogleCredentials) -> list:
         """Get today's calendar schedule."""
         today = datetime.now().strftime("%Y-%m-%d")
         try:
-            return client.list_events_voice(today, today)
+            import asyncio
+            client = await asyncio.get_event_loop().run_in_executor(None, _get_client)
+            return await asyncio.get_event_loop().run_in_executor(
+                None, client.list_events_voice, today, today
+            )
         except Exception as e:
             logger.error(f"Schedule lookup failed: {e}")
             return "I wasn't able to check today's schedule."

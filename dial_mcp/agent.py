@@ -247,7 +247,7 @@ YOUR TASK FOR THIS CALL:
                 },
             },
             tts_text_transforms=["filter_markdown", "filter_emoji"],
-            tools=calendar_tools,
+            **({"tools": calendar_tools} if calendar_tools else {}),
             mcp_servers=mcp_servers,
             max_tool_steps=5,
             preemptive_generation=True,
