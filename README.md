@@ -2,6 +2,10 @@
 
 Give your AI agent the ability to make phone calls — with real-time tool access.
 
+> **Just want it to work?** A hosted version is coming — no API keys, no setup, pay per minute. [Join the waitlist →](https://github.com/ForbidTANNEN/dial-mcp/issues/1)
+
+### Self-hosted quick start
+
 ```
 pip install dial-mcp && dial-mcp init && dial-mcp serve
 ```
@@ -73,7 +77,11 @@ This prompts you for each API key and saves them locally to `config.yaml`. Your 
 dial-mcp serve
 ```
 
-This starts an MCP server at `http://localhost:8080/sse`.
+This starts an MCP server at `http://localhost:8080/sse`. You can change the port:
+
+```bash
+dial-mcp serve --port 3000
+```
 
 ### 5. Connect to your agent
 
