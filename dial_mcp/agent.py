@@ -18,6 +18,8 @@ from livekit.plugins.cartesia import TTS as CartesiaTTS
 from livekit.plugins.deepgram import STT as DeepgramSTT
 from livekit.plugins.silero import VAD as SileroVAD
 
+from dial_mcp.calendar.credentials import discover_google_credentials
+from dial_mcp.calendar.tools import build_calendar_tools
 from dial_mcp.call_manager import CallManager
 from dial_mcp.config import Config, MCPServerConfig
 from dial_mcp.post_processor import extract_actions
@@ -174,6 +176,15 @@ async def run_call(
         for url in (extra_mcp_urls or []):
             mcp_servers.append(MCPServerHTTP(url=url, tool_result_resolver=_clean_tool_result))
 
+        # Auto-inject calendar tools if credentials are available
+        calendar_tools = []
+        cal_creds = discover_google_credentials()
+        if cal_creds:
+            calendar_tools = build_calendar_tools(cal_creds)
+            logger.info(f"Calendar tools injected from {cal_creds.source}")
+        else:
+            logger.info("No calendar credentials found — voice agent won't have calendar access")
+
         now = datetime.now()
         current_date = now.strftime("%A, %B %d, %Y")
         current_time = now.strftime("%I:%M %p")
@@ -187,6 +198,13 @@ YOUR TASK FOR THIS CALL:
 
         if context:
             agent_instructions += f"\n\nCONTEXT:\n{context}"
+
+        if cal_creds:
+            agent_instructions += (
+                "\n\nYou have access to the caller's Google Calendar. "
+                "Use check_calendar or check_availability when you need to verify dates or times. "
+                "Do not announce that you are checking — just do it silently and speak the result."
+            )
 
         agent = PhoneCallAgent(instructions=agent_instructions)
 
@@ -229,6 +247,7 @@ YOUR TASK FOR THIS CALL:
                 },
             },
             tts_text_transforms=["filter_markdown", "filter_emoji"],
+            tools=calendar_tools,
             mcp_servers=mcp_servers,
             max_tool_steps=5,
             preemptive_generation=True,
