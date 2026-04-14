@@ -10,6 +10,8 @@ from mcp.types import Tool, TextContent
 
 from dial_mcp.call_manager import CallManager, CallStatus
 from dial_mcp.config import Config
+from dial_mcp.calendar.credentials import discover_google_credentials
+from dial_mcp.calendar.oauth import run_oauth_flow
 
 logger = logging.getLogger("dial-mcp.server")
 
@@ -27,14 +29,15 @@ def create_mcp_server(config: Config, call_manager: CallManager) -> Server:
                     "read from MCP tools (calendars, CRM, etc.) in real-time DURING the call. "
                     "Returns a call_id immediately — use get_call_result to check status and "
                     "get the transcript when complete.\n\n"
-                    "IMPORTANT — mcp_servers: If you have MCP servers connected (calendar, CRM, "
-                    "email, etc.), pass their HTTP URLs in the mcp_servers array so the voice "
-                    "agent can access them during the call. For example, if you are connected to "
-                    "a Google Calendar MCP at http://localhost:8001/mcp, include that URL. The "
-                    "voice agent will be able to check availability, look up contacts, and read "
-                    "data in real-time while talking. The voice agent has READ-ONLY access — it "
-                    "cannot create, update, or delete anything. After the call, proposed write "
-                    "actions are returned for you to execute.\n\n"
+                    "Before calling, check list_integrations to see if calendar is connected. "
+                    "If the call involves scheduling or appointments, the voice agent will "
+                    "automatically use Google Calendar in real-time during the call. No need to "
+                    "pass mcp_servers for calendar — it's built in when linked.\n\n"
+                    "IMPORTANT — mcp_servers: For non-calendar MCP servers (CRM, email, etc.), "
+                    "pass their HTTP URLs in the mcp_servers array so the voice agent can access "
+                    "them during the call. The voice agent has READ-ONLY access — it cannot "
+                    "create, update, or delete anything. After the call, proposed write actions "
+                    "are returned for you to execute.\n\n"
                     "IMPORTANT — instructions: Be specific about who the caller is and what the "
                     "voice agent should do. Include the caller's name, relevant account details, "
                     "and the goal of the call. The voice agent will follow these instructions "
@@ -104,6 +107,36 @@ def create_mcp_server(config: Config, call_manager: CallManager) -> Server:
                     "properties": {},
                 },
             ),
+            Tool(
+                name="list_integrations",
+                description=(
+                    "Check which integrations are connected (e.g. Google Calendar). "
+                    "Call this before make_call if the call involves scheduling or appointments. "
+                    "If Google Calendar is not linked, call link_calendar first to connect it."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {},
+                },
+            ),
+            Tool(
+                name="link_calendar",
+                description=(
+                    "Link a Google Calendar account so the voice agent can access it during calls. "
+                    "Opens a browser window for OAuth authentication."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "provider": {
+                            "type": "string",
+                            "enum": ["google"],
+                            "description": "Calendar provider to link. Currently only 'google' is supported.",
+                        },
+                    },
+                    "required": ["provider"],
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -114,6 +147,10 @@ def create_mcp_server(config: Config, call_manager: CallManager) -> Server:
             return await handle_get_call_result(call_manager, arguments)
         elif name == "list_active_calls":
             return await handle_list_active_calls(call_manager)
+        elif name == "list_integrations":
+            return await handle_list_integrations()
+        elif name == "link_calendar":
+            return await handle_link_calendar(arguments)
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
@@ -214,3 +251,45 @@ async def handle_list_active_calls(call_manager: CallManager) -> list[TextConten
         for c in active
     ]
     return [TextContent(type="text", text=json.dumps({"active_calls": calls}))]
+
+
+async def handle_list_integrations() -> list[TextContent]:
+    creds = discover_google_credentials()
+    if creds is not None:
+        google_calendar = {"status": "linked", "source": creds.source}
+    else:
+        google_calendar = {
+            "status": "not_linked",
+            "action": "Call link_calendar with provider='google' to connect Google Calendar.",
+        }
+    return [TextContent(type="text", text=json.dumps({"google_calendar": google_calendar}))]
+
+
+async def handle_link_calendar(arguments: dict) -> list[TextContent]:
+    provider = arguments.get("provider")
+    if provider != "google":
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": f"Unsupported provider: {provider!r}. Only 'google' is currently supported."}),
+        )]
+
+    creds = discover_google_credentials()
+    if creds is not None:
+        return [TextContent(
+            type="text",
+            text=json.dumps({"status": "already_linked", "source": creds.source}),
+        )]
+
+    try:
+        run_oauth_flow()
+        return [TextContent(
+            type="text",
+            text=json.dumps({"status": "linked", "message": "Google Calendar successfully linked."}),
+        )]
+    except Exception as exc:
+        return [TextContent(
+            type="text",
+            text=json.dumps({"status": "failed", "error": str(exc)}),
+        )]
+
+
