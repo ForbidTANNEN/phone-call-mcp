@@ -192,7 +192,7 @@ async def handle_make_call(
         text=json.dumps({
             "call_id": call_id,
             "status": "in_progress",
-            "message": f"Call initiated to {to_number}. Use get_call_result with this call_id to check status.",
+            "message": f"Call initiated to {to_number}. You MUST poll get_call_result every 15-20 seconds until status is 'completed' or 'failed', then report the transcript and proposed_actions to the user.",
         }),
     )]
 
@@ -229,7 +229,7 @@ async def handle_get_call_result(
     elif call.status == CallStatus.FAILED:
         result["error"] = call.error
     elif call.status == CallStatus.IN_PROGRESS:
-        result["message"] = "Call is still in progress. Try again in a few moments."
+        result["message"] = "Call is still in progress. Poll again in 15-20 seconds."
 
     return [TextContent(type="text", text=json.dumps(result))]
 
