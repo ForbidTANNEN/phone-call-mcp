@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dial-mcp"
+version = "0.1.0"
+description = "MCP server that gives AI agents phone call capabilities with real-time tool access"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+keywords = ["mcp", "phone", "voice", "ai", "agent", "livekit", "twilio"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: Telephony",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "livekit>=1.1.5",
+    "livekit-api>=1.1.0",
+    "livekit-agents[mcp]>=1.5.0",
+    "livekit-plugins-anthropic>=1.5.0",
+    "livekit-plugins-deepgram>=1.5.0",
+    "livekit-plugins-cartesia>=1.5.0",
+    "livekit-plugins-silero>=1.5.0",
+    "mcp>=1.0.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "anthropic>=0.40.0",
+    "starlette>=0.40.0",
+    "uvicorn>=0.30.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[project.urls]
+Homepage = "https://github.com/ForbidTANNEN/dial-mcp"
+Repository = "https://github.com/ForbidTANNEN/dial-mcp"
+Issues = "https://github.com/ForbidTANNEN/dial-mcp/issues"
+
+[project.scripts]
+dial-mcp = "dial_mcp.__main__:main"

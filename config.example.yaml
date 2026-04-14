@@ -1,0 +1,37 @@
+# Telephony (Twilio + LiveKit SIP)
+twilio:
+  account_sid: "AC..."
+  auth_token: "your_auth_token"
+  phone_number: "+15551234567"
+  sip_trunk_id: "ST_..."  # LiveKit outbound SIP trunk ID (see setup docs)
+
+# LiveKit (https://cloud.livekit.io)
+livekit:
+  url: "wss://your-project.livekit.cloud"
+  api_key: "your_api_key"
+  api_secret: "your_api_secret"
+
+# LLM - powers the voice agent's brain
+anthropic:
+  api_key: "sk-ant-..."
+  model: "claude-haiku-4-5-20251001"  # default; sonnet/opus also work
+
+# Speech-to-Text
+deepgram:
+  api_key: "your_deepgram_key"
+
+# Text-to-Speech
+cartesia:
+  api_key: "your_cartesia_key"
+
+# MCP servers the voice agent can READ from during calls
+# These are the same MCP servers your orchestrator uses
+mcp_servers:
+  - name: "calendar"
+    url: "http://localhost:8001/sse"
+
+  - name: "crm"
+    command: "npx"
+    args: ["some-crm-mcp-server"]
+    env:
+      API_KEY: "your_api_key"
